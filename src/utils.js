@@ -35,6 +35,7 @@ function findModuleById(compilation, id) {
 }
 
 /**
+ * 新建node.js模块，loaderContext中执行 字符串代码
  * @param {LoaderContext} loaderContext
  * @param {string | Buffer} code
  * @param {string} filename

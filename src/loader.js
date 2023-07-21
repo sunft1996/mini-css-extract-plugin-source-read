@@ -69,6 +69,7 @@ function hotLoader(content, context) {
  * @param {string} request
  */
 function pitch(request) {
+  // 如果使用了 webpack 5 的 experiments.css 特性，并且当前模块类型为 css，则发出警告
   if (
     this._compiler &&
     this._compiler.options &&
@@ -94,6 +95,7 @@ function pitch(request) {
     MiniCssExtractPlugin.pluginSymbol
   ];
 
+  // 如果没有添加 mini-css-extract-plugin 插件，则抛出错误 (使用speed-measure-webpack-plugin会报错)
   if (!optionsFromPlugin) {
     callback(
       new Error(
@@ -122,6 +124,7 @@ function pitch(request) {
       typeof options.esModule !== "undefined" ? options.esModule : true;
 
     /**
+     * 将依赖添加到 this._module的依赖中
      * @param {Dependency[] | [null, object][]} dependencies
      */
     const addDependencies = (dependencies) => {
@@ -136,6 +139,7 @@ function pitch(request) {
       const identifierCountMap = new Map();
       let lastDep;
 
+      // 遍历模块依赖，将依赖添加到当前 this._module 的依赖中
       for (const dependency of dependencies) {
         if (!(/** @type {Dependency} */ (dependency).identifier) || !emit) {
           // eslint-disable-next-line no-continue
@@ -146,6 +150,7 @@ function pitch(request) {
           identifierCountMap.get(
             /** @type {Dependency} */ (dependency).identifier
           ) || 0;
+        // 获取CssDependency类
         const CssDependency = MiniCssExtractPlugin.getCssDependency(webpack);
 
         /** @type {NormalModule} */
@@ -199,6 +204,7 @@ function pitch(request) {
       /** @type {Dependency[] | [null, object][]} */
       let dependencies;
 
+      // 将exports转为dependencies依赖
       if (!Array.isArray(exports)) {
         dependencies = [[null, exports]];
       } else {
@@ -242,6 +248,7 @@ function pitch(request) {
       return;
     }
 
+    // 根据导出类型，生成最终导出的代码
     const result = locals
       ? namedExport
         ? Object.keys(locals)
@@ -261,15 +268,18 @@ function pitch(request) {
 
     let resultSource = `// extracted by ${MiniCssExtractPlugin.pluginName}`;
 
+    // 只有在支持热更新并且 emit 为 true 时，才会添加热更新代码
     // only attempt hotreloading if the css is actually used for something other than hash values
     resultSource +=
       this.hot && emit
         ? hotLoader(result, { loaderContext: this, options, locals })
         : result;
 
+    // 将处理后的结果传递给下一个 Loader
     callback(null, resultSource);
   };
 
+  // 设置publicPath
   let { publicPath } =
     /** @type {Compilation} */
     (this._compilation).outputOptions;
@@ -285,6 +295,7 @@ function pitch(request) {
     publicPath = AUTO_PUBLIC_PATH;
   }
 
+  // 使用实验特性 experimentalUseImportModule 或者支持 this.importModule 函数时，通过this.importModule处理 CSS
   if (
     (typeof optionsFromPlugin.experimentalUseImportModule === "undefined" &&
       typeof this.importModule === "function") ||
@@ -316,6 +327,7 @@ function pitch(request) {
       publicPathForExtract = publicPath;
     }
 
+    // 处理 CSS
     this.importModule(
       `${this.resourcePath}.webpack[javascript/auto]!=!!!${request}`,
       {
@@ -333,15 +345,18 @@ function pitch(request) {
 
           return;
         }
-
+        // 导出处理结果
         handleExports(exports);
       }
     );
     return;
   }
+  // 不使用实验特性时，使用子compile来处理css
 
+  // 删除当前mini-css-extract-plugin loader
   const loaders = this.loaders.slice(this.loaderIndex + 1);
 
+  // 将当前 CSS 文件添加为依赖
   this.addDependency(this.resourcePath);
 
   const childFilename = "*";
@@ -351,6 +366,7 @@ function pitch(request) {
     publicPath,
   };
 
+  // 创建子compile来处理css 
   const childCompiler =
     /** @type {Compilation} */
     (this._compilation).createChildCompiler(
@@ -384,6 +400,7 @@ function pitch(request) {
 
   new EnableLibraryPlugin("commonjs2").apply(childCompiler);
 
+  // 设置入口
   EntryOptionPlugin.applyEntryOption(childCompiler, this.context, {
     child: {
       library: {
@@ -393,7 +410,7 @@ function pitch(request) {
     },
   });
   const { LimitChunkCountPlugin } = webpack.optimize;
-
+  // 限制只输出一个 chunk
   new LimitChunkCountPlugin({ maxChunks: 1 }).apply(childCompiler);
 
   const { NormalModule } = webpack;
@@ -410,8 +427,11 @@ function pitch(request) {
       normalModuleHook.tap(
         `${MiniCssExtractPlugin.pluginName} loader`,
         (loaderContext, module) => {
+          // 下次loader转化时，如果遇到当前css模块
           if (module.request === request) {
             // eslint-disable-next-line no-param-reassign
+
+            // 更新为删除mini-css-extract-plugin loader 后的loader列表，避免当前Loader再次处理
             module.loaders = loaders.map((loader) => {
               return {
                 type: null,
@@ -438,11 +458,13 @@ function pitch(request) {
       compilation.hooks.processAssets.tap(
         MiniCssExtractPlugin.pluginName,
         () => {
+          // 保存source
           source =
             compilation.assets[childFilename] &&
             compilation.assets[childFilename].source();
 
           // Remove all chunk assets
+          // 为了避免将样式内联到 JavaScript 文件中，清除assets
           compilation.chunks.forEach((chunk) => {
             chunk.files.forEach((file) => {
               compilation.deleteAsset(file);
@@ -453,6 +475,7 @@ function pitch(request) {
     }
   );
 
+  // 运行子compiler
   childCompiler.runAsChild((error, entries, compilation) => {
     if (error) {
       callback(error);
@@ -494,6 +517,7 @@ function pitch(request) {
 
     let originalExports;
     try {
+      // 在loader上下文，执行刚刚导出的 source代码，导出webpack的立即执行函数
       originalExports = evalModuleCode(this, source, request);
     } catch (e) {
       callback(/** @type {Error} */ (e));
@@ -501,6 +525,7 @@ function pitch(request) {
       return;
     }
 
+    // 将导出的立即执行函数，利用module.addDependicies设为当前模块的依赖
     handleExports(originalExports, compilation, assets, assetsInfo);
   });
 }

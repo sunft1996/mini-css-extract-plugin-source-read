@@ -391,6 +391,9 @@ class MiniCssExtractPlugin {
     /**
      * Prevent creation of multiple CssDependency classes to allow other integrations to get the current CssDependency.
      */
+    // 判断有没有将CssDependency这个class存入缓存，这里的webpack来自于compiler.webpack，它是个方法
+    // 当前插件apply时compiler.webpack会被speed-measure-webpack-plugin 设为proxy
+    // 但是第二次normal-loader-hook触发时，传入的不是proxy，引发bug
     if (cssDependencyCache.has(webpack)) {
       return /** @type {CssDependencyConstructor} */ (
         cssDependencyCache.get(webpack)
@@ -636,6 +639,7 @@ class MiniCssExtractPlugin {
       const { loader: normalModuleHook } =
         NormalModule.getCompilationHooks(compilation);
 
+      // 添加插件标记，loader转化时会检测
       normalModuleHook.tap(
         pluginName,
         /**
@@ -652,6 +656,7 @@ class MiniCssExtractPlugin {
       );
     });
 
+    // 初始化 compilation 时调用，在触发 compilation 事件之前调用。这个钩子 不会 被复制到子编译器
     compiler.hooks.thisCompilation.tap(pluginName, (compilation) => {
       class CssModuleFactory {
         /**
@@ -668,6 +673,7 @@ class MiniCssExtractPlugin {
         }
       }
 
+      // webpack中添加CssDependency类型，用于生成CssModule
       compilation.dependencyFactories.set(
         CssDependency,
         new CssModuleFactory()
@@ -678,11 +684,13 @@ class MiniCssExtractPlugin {
         apply() {}
       }
 
+      // 设置CssDependency模版
       compilation.dependencyTemplates.set(
         CssDependency,
         new CssDependencyTemplate()
       );
 
+      // 这个hook会根据chunk生成对应的manifest，其中manifest.render()可以根据template生成对应的source
       compilation.hooks.renderManifest.tap(
         pluginName,
         /**
@@ -745,6 +753,7 @@ class MiniCssExtractPlugin {
         }
       );
 
+      // 生成css chunk的contentHash
       compilation.hooks.contentHash.tap(pluginName, (chunk) => {
         const { outputOptions, chunkGraph } = compilation;
         const modules = this.sortModules(
@@ -1305,6 +1314,7 @@ class MiniCssExtractPlugin {
   }
 
   /**
+   * 根据模版生成assets
    * @private
    * @param {Compiler} compiler
    * @param {Compilation} compilation
