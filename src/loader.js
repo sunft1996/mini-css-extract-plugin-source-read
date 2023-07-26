@@ -327,6 +327,7 @@ function pitch(request) {
       publicPathForExtract = publicPath;
     }
 
+    // 使用loaderContext中的importModule， 参数一为userRequest
     // 处理 CSS
     this.importModule(
       `${this.resourcePath}.webpack[javascript/auto]!=!!!${request}`,
